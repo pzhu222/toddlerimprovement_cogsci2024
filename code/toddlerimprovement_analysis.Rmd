@@ -1,0 +1,177 @@
+---
+title: "analysis_toddlerimprovement"
+output: html_document
+date: "2024-02-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#load in packages
+library(tidyverse)
+library(here)
+library(BFpack)
+library(boot)
+library(extrafont)
+library(janitor)
+
+```
+
+First, Expt. 1
+
+```{r}
+
+df.expt1 <- read.csv(here("data", "expt1_data_toddlerimprovement.csv"))
+
+df.expt1 <- df.expt1 |>  
+  filter(exclude == 0 |
+         is.na(exclude)) |> 
+  mutate(condition = ifelse(condition == 1, "Improvement", "Stochastic")) |> 
+  select(age,
+         gender,
+         condition,
+         side,
+         choice) |> 
+  filter(!is.na(choice)) |> 
+  mutate(agebin = ifelse(age < 3, "young", "old"))
+
+```
+
+```{r}
+
+#analysis!
+
+mean(as.numeric(df.expt1$age), na.rm = T)
+
+sd(as.numeric(df.expt1$age), na.rm = T)
+
+range(as.numeric(df.expt1$age), na.rm = T)
+
+df.expt1 |> 
+  group_by(condition, choice) |> 
+  summarize(n = n())
+
+df.expt1_fisher <- df.expt1 |> 
+  group_by(condition) |> 
+  summarize(test = sum(choice),
+            notest = n() - sum(choice)) |> 
+  select(test, notest)
+
+fisher.test(df.expt1_fisher)
+
+```
+
+Now Expt. 2
+
+```{r}
+
+df.expt2_raw <- read.csv(here("data", "expt2_data_toddlerimprovement.csv"))
+
+df.expt2 <- df.expt2_raw |>  
+  filter(exclude == 0 |
+         is.na(exclude)) |> 
+  mutate(condition = ifelse(condition == 1, "Improvement", "Stochastic")) |> 
+  select(age,
+         gender,
+         condition,
+         side,
+         choice) |> 
+  filter(!is.na(choice))
+
+df.expt2 |> 
+  group_by(condition, side) |> 
+  summarize(n = n())
+
+```
+```{r}
+
+#check exclusions
+
+df.expt2_exclusions <- df.expt2_raw |>  
+  filter(exclude == 1) |> 
+  mutate(condition = ifelse(condition == 1, "Improvement", "Stochastic")) |> 
+  select(age,
+         gender,
+         condition,
+         side,
+         choice,
+         exclude_reason) |> 
+  group_by(exclude_reason) |> 
+  summarize(n = n())
+
+df.expt2_exclusions
+
+```
+```{r}
+
+mean(as.numeric(df.expt2$age), na.rm = T)
+
+sd(as.numeric(df.expt2$age), na.rm = T)
+
+range(as.numeric(df.expt2$age), na.rm = T)
+
+df.expt2 |> 
+  group_by(condition, choice) |> 
+  summarize(n = n())
+
+#first BF analysis
+
+df.expt2 <- df.expt2 |> 
+  mutate(condition = as.factor(condition)) |> 
+  clean_names()
+
+model <- glm(choice ~ condition, family = 'binomial',
+             data = df.expt2)
+
+summary(model)
+
+BF_model <- BF(model, hypothesis = 'condition < 0; condition = 0',
+               complement = F)
+
+summary(BF_model)
+
+
+
+#now exploratory analysis
+
+df.expt2_fisher <- df.expt2 |> 
+  group_by(condition) |> 
+  summarize(test = sum(choice),
+            notest = n() - sum(choice)) |> 
+  select(test, notest)
+
+fisher.test(df.expt2_fisher)
+
+```
+
+```{r}
+
+#plot it
+
+ggplot(data = df.expt2,
+       aes(x = as.factor(condition), 
+           y = choice, 
+           color = as.factor(condition)))  +
+  geom_jitter(height = 0,
+              width = .4,
+              alpha = .3,
+              size = 5) +
+  stat_summary(fun.data = "mean_cl_boot",
+               geom = "pointrange",
+               size = 2,
+               linewidth = 1.5) +
+  scale_color_manual(values = c("Improvement" = "#4682B4",
+                                "Stochastic" = "#f1807e")) +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 28),
+        axis.title = element_text(size = 28),
+        axis.title.x = element_text(vjust = -.75),
+        axis.title.y = element_text(vjust = +1.5)) +
+  labs(x = "Condition",
+       y = "Proportion Choosing Test Toy")
+
+ggsave(here("figs", "fig2.png"), dpi = 300)
+
+```
+
